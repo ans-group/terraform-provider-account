@@ -6,7 +6,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"net/http"
 
 	accountservice "github.com/ans-group/sdk-go/pkg/service/account"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -26,7 +25,7 @@ func NewAccountsApplication() resource.Resource {
 
 // AccountsApplication defines the resource implementation.
 type AccountsApplication struct {
-	client *http.Client
+	client accountservice.AccountService
 }
 
 // AccountsApplicationModel describes the resource data model.
@@ -97,8 +96,7 @@ func (r *AccountsApplication) Schema(_ context.Context, _ resource.SchemaRequest
 
 func (r *AccountsApplication) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var d AccountsApplicationModel
-	var meta interface{}
-	service := meta.(accountservice.AccountService)
+	service := r.client
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &d)...)
 
@@ -158,8 +156,7 @@ func (r *AccountsApplication) Create(ctx context.Context, req resource.CreateReq
 
 func (r *AccountsApplication) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var d AccountsApplicationModel
-	var meta interface{}
-	service := meta.(accountservice.AccountService)
+	service := r.client
 	resp.Diagnostics.Append(req.State.Get(ctx, &d)...)
 
 	if resp.Diagnostics.HasError() {
@@ -212,8 +209,7 @@ func (r *AccountsApplication) Read(ctx context.Context, req resource.ReadRequest
 
 func (r *AccountsApplication) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan, d AccountsApplicationModel
-	var meta interface{}
-	service := meta.(accountservice.AccountService)
+	service := r.client
 
 	if !plan.Name.Equal(d.Name) || !plan.Description.Equal(d.Description) {
 		tflog.Info(ctx, "Updating Application Key Details", map[string]interface{}{
@@ -273,8 +269,7 @@ func (r *AccountsApplication) Update(ctx context.Context, req resource.UpdateReq
 
 func (r *AccountsApplication) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	var d AccountsApplicationModel
-	var meta interface{}
-	service := meta.(accountservice.AccountService)
+	service := r.client
 
 	resp.Diagnostics.Append(req.State.Get(ctx, &d)...)
 
