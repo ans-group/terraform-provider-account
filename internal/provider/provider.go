@@ -5,7 +5,8 @@ package provider
 
 import (
 	"context"
-	"terraform-provider-accounts/pkg/logger"
+	"fmt"
+	"terraform-provider-account/pkg/logger"
 
 	"github.com/ans-group/sdk-go/pkg/client"
 	"github.com/ans-group/sdk-go/pkg/config"
@@ -17,37 +18,38 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
-const userAgent = "terraform-provider-accounts"
+const userAgent = "terraform-provider-account"
 
 var (
-	_ provider.Provider = &accountsProvider{}
+	_ provider.Provider = &accountProvider{}
 )
 
 func New(version string) func() provider.Provider {
 	return func() provider.Provider {
-		return &accountsProvider{
+		return &accountProvider{
 			version: version,
 		}
 	}
 }
 
-type accountsProvider struct {
+type accountProvider struct {
 	version string
 }
 
-type accountsProviderModel struct {
+type accountProviderModel struct {
 	Context types.String `tfsdk:"context"`
 	APIKey  types.String `tfsdk:"api_key"`
 }
 
-func (p *accountsProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
-	resp.TypeName = "accounts"
+func (p *accountProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
+	resp.TypeName = "account"
 	resp.Version = p.version
 }
 
-func (p *accountsProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
+func (p *accountProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"context": schema.StringAttribute{
@@ -63,7 +65,11 @@ func (p *accountsProvider) Schema(_ context.Context, _ provider.SchemaRequest, r
 	}
 }
 
-func (p *accountsProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
+func (p *accountProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
+	var configuration accountProviderModel
+
+	resp.Diagnostics.Append(req.Config.Get(ctx, &configuration)...)
+
 	err := config.Init("")
 	if err != nil {
 		resp.Diagnostics.AddAttributeError(
@@ -75,7 +81,7 @@ func (p *accountsProvider) Configure(ctx context.Context, req provider.Configure
 		logging.SetLogger(&logger.ProviderLogger{})
 	}
 
-	var configuration accountsProviderModel
+	tflog.Debug(ctx, fmt.Sprintf("Created config model: %+v", configuration))
 
 	context := configuration.Context.ValueString()
 	if len(context) > 0 {
@@ -108,10 +114,10 @@ func (p *accountsProvider) Configure(ctx context.Context, req provider.Configure
 	client := client.NewClient(conn).AccountService()
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Unable to Create Accounts API Client",
-			"An unexpected error occurred when creating the Accounts API client. "+
+			"Unable to Create Account API Client",
+			"An unexpected error occurred when creating the Account API client. "+
 				"If the error is not clear, please contact the provider developers.\n\n"+
-				"Accounts Client Error: "+err.Error(),
+				"Account Client Error: "+err.Error(),
 		)
 		return
 	}
@@ -129,13 +135,15 @@ func getConnection() (connection.Connection, error) {
 }
 
 // DataSources defines the data sources implemented in the provider.
-func (p *accountsProvider) DataSources(_ context.Context) []func() datasource.DataSource {
+func (p *accountProvider) DataSources(_ context.Context) []func() datasource.DataSource {
 	return nil
 }
 
 // Resources defines the resources implemented in the provider.
-func (p *accountsProvider) Resources(_ context.Context) []func() resource.Resource {
+func (p *accountProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
-		NewAccountsApplication,
+		NewAccountApplication,
+		NewApplicationIPRestriction,
+		NewApplicationServiceMapping,
 	}
 }

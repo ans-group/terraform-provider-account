@@ -11,52 +11,52 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
-var _ resource.Resource = &AccountsApplication{}
-var _ resource.ResourceWithImportState = &AccountsApplication{}
+var _ resource.Resource = &AccountApplication{}
+var _ resource.ResourceWithImportState = &AccountApplication{}
 
-func NewAccountsApplication() resource.Resource {
-	return &AccountsApplication{}
+func NewAccountApplication() resource.Resource {
+	return &AccountApplication{}
 }
 
-// AccountsApplication defines the resource implementation.
-type AccountsApplication struct {
+// AccountApplication defines the resource implementation.
+type AccountApplication struct {
 	client accountservice.AccountService
 }
 
-// AccountsApplicationModel describes the resource data model.
-type AccountsApplicationModel struct {
-	ID            types.String                  `tfsdk:"id"`
-	Name          types.String                  `tfsdk:"name"`
-	Description   types.String                  `tfsdk:"description"`
-	Scope         []ApplicationScopeModel       `tfsdk:"scope"`
-	IPRestriction ApplicationIPRestrictionModel `tfsdk:"ip_restriction"`
+// AccountApplicationModel describes the resource data model.
+type AccountApplicationModel struct {
+	ID          types.String `tfsdk:"id"`
+	Key         types.String `tfsdk:"key"`
+	Name        types.String `tfsdk:"name"`
+	Description types.String `tfsdk:"description"`
 }
 
-type ApplicationScopeModel struct {
-	Service types.String   `tfsdk:"service"`
-	Roles   []types.String `tfsdk:"roles"`
-}
-
-type ApplicationIPRestrictionModel struct {
-	Type   types.String   `tfsdk:"type"`
-	Ranges []types.String `tfsdk:"ranges"`
-}
-
-func (r *AccountsApplication) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+func (r *AccountApplication) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_application"
 }
 
 // Schema defines the schema for the resource.
-func (r *AccountsApplication) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *AccountApplication) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"key": schema.StringAttribute{
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"name": schema.StringAttribute{
 				Required: true,
@@ -64,38 +64,31 @@ func (r *AccountsApplication) Schema(_ context.Context, _ resource.SchemaRequest
 			"description": schema.StringAttribute{
 				Optional: true,
 			},
-			"scope": schema.ListNestedAttribute{
-				Optional: true,
-				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"service": schema.StringAttribute{
-							Required: true,
-						},
-						"roles": schema.ListAttribute{
-							ElementType: types.StringType,
-							Required:    true,
-						},
-					},
-				},
-			},
-			"ip_restriction": schema.SingleNestedAttribute{
-				Optional: true,
-				Attributes: map[string]schema.Attribute{
-					"type": schema.StringAttribute{
-						Required: true,
-					},
-					"ranges": schema.ListAttribute{
-						ElementType: types.StringType,
-						Required:    true,
-					},
-				},
-			},
 		},
 	}
 }
 
-func (r *AccountsApplication) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var d AccountsApplicationModel
+func (r *AccountApplication) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	if req.ProviderData == nil {
+		return
+	}
+
+	client, ok := req.ProviderData.(accountservice.AccountService)
+
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			fmt.Sprintf("Expected accountservice.AccountService, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+
+		return
+	}
+
+	r.client = client
+}
+
+func (r *AccountApplication) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+	var d AccountApplicationModel
 	service := r.client
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &d)...)
@@ -109,53 +102,28 @@ func (r *AccountsApplication) Create(ctx context.Context, req resource.CreateReq
 		Description: d.Description.ValueString(),
 	}
 
-	tflog.Debug(ctx, fmt.Sprintf("Created AccountsApplicationAPIModel: %+v", createReq))
+	tflog.Debug(ctx, fmt.Sprintf("Created AccountApplicationAPIModel: %+v", createReq))
 
 	tflog.Info(ctx, "Creating API Application")
 	createData, err := service.CreateApplication(createReq)
 	if err != nil {
-		tflog.Error(ctx, fmt.Sprintf("Error creating network rule: %s", err))
+		resp.Diagnostics.AddError(
+			"Error Creating API Application",
+			fmt.Sprint(err),
+		)
 		return
 	}
 
-	if d.Scope != nil {
-		tflog.Info(ctx, "Setting API Application Services")
-		setServiceReq := accountservice.SetServiceRequest{
-			Scopes: expandApplicationScope(ctx, d.Scope),
-		}
-
-		err = service.SetApplicationServices(createData.ID, setServiceReq)
-
-		if err != nil {
-			tflog.Error(ctx, fmt.Sprintf("Error Setting application services: %s", err))
-			return
-		}
-	}
-
-	if d.IPRestriction.Ranges != nil {
-		tflog.Info(ctx, "Setting API Application Restriction")
-		setRestrictionReq := accountservice.SetRestrictionRequest{
-			IPRestrictionType: d.IPRestriction.Type.ValueString(),
-			IPRanges:          expandArray(ctx, d.IPRestriction.Ranges),
-		}
-
-		err = service.SetApplicationRestrictions(createData.ID, setRestrictionReq)
-
-		if err != nil {
-			tflog.Error(ctx, fmt.Sprintf("Error Setting application restrictions: %s", err))
-			return
-		}
-	}
-
 	d.ID = types.StringValue(createData.ID)
+	d.Key = types.StringValue(createData.Key)
 
 	tflog.Trace(ctx, "created a resource")
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &d)...)
 }
 
-func (r *AccountsApplication) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var d AccountsApplicationModel
+func (r *AccountApplication) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var d AccountApplicationModel
 	service := r.client
 	resp.Diagnostics.Append(req.State.Get(ctx, &d)...)
 
@@ -170,90 +138,45 @@ func (r *AccountsApplication) Read(ctx context.Context, req resource.ReadRequest
 	application, err := service.GetApplication(d.ID.ValueString())
 
 	if err != nil {
-		tflog.Error(ctx, fmt.Sprintf("Error Retrieving Application: %s", err))
+		resp.Diagnostics.AddError(
+			"Error Retrieving API Application",
+			fmt.Sprint(err),
+		)
 		return
 	}
 
 	d.Name = types.StringValue(application.Name)
 	d.Description = types.StringValue(application.Description)
 
-	tflog.Info(ctx, "Retrieving API Application Services", map[string]interface{}{
-		"id": d.ID.ValueString(),
-	})
-
-	services, err := service.GetApplicationServices(d.ID.ValueString())
-
-	if err != nil {
-		tflog.Error(ctx, fmt.Sprintf("Error Retrieving Application Scope: %s", err))
-		return
-	}
-
-	d.Scope = readApplicationScope(ctx, services.Scopes)
-
-	tflog.Info(ctx, "Retrieving API Application Restrictions", map[string]interface{}{
-		"id": d.ID.ValueString(),
-	})
-
-	restrictions, err := service.GetApplicationRestrictions(d.ID.ValueString())
-
-	if err != nil {
-		tflog.Error(ctx, fmt.Sprintf("Error Retrieving Application Restrictions: %s", err))
-		return
-	}
-
-	d.IPRestriction.Type = types.StringValue(restrictions.IPRestrictionType)
-	d.IPRestriction.Ranges = readAppScopeArray(ctx, restrictions.IPRanges)
-
 	resp.Diagnostics.Append(resp.State.Set(ctx, &d)...)
 }
 
-func (r *AccountsApplication) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan, d AccountsApplicationModel
+func (r *AccountApplication) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var plan, d AccountApplicationModel
 	service := r.client
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &d)...)
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 
 	if !plan.Name.Equal(d.Name) || !plan.Description.Equal(d.Description) {
 		tflog.Info(ctx, "Updating Application Key Details", map[string]interface{}{
-			"id": d.ID.ValueString(),
+			"id":          plan.ID.ValueString(),
+			"name":        plan.Name.ValueString(),
+			"description": plan.Description.ValueString(),
 		})
 
 		updateReq := accountservice.UpdateApplicationRequest{
-			Name:        d.Name.ValueString(),
-			Description: d.Description.ValueString(),
+			Name:        plan.Name.ValueString(),
+			Description: plan.Description.ValueString(),
 		}
 
 		err := service.UpdateApplication(d.ID.ValueString(), updateReq)
 
 		if err != nil {
-			tflog.Error(ctx, fmt.Sprintf("Error Updating Application Details: %s", err))
-			return
-		}
-	}
-
-	if plan.Scope != nil {
-		tflog.Info(ctx, "Setting API Application Services")
-		setServiceReq := accountservice.SetServiceRequest{
-			Scopes: expandApplicationScope(ctx, d.Scope),
-		}
-
-		err := service.SetApplicationServices(d.ID.ValueString(), setServiceReq)
-
-		if err != nil {
-			tflog.Error(ctx, fmt.Sprintf("Error Setting application services: %s", err))
-			return
-		}
-	}
-
-	if plan.IPRestriction.Ranges != nil {
-		tflog.Info(ctx, "Setting API Application Restriction")
-		setRestrictionReq := accountservice.SetRestrictionRequest{
-			IPRestrictionType: d.IPRestriction.Type.ValueString(),
-			IPRanges:          expandArray(ctx, d.IPRestriction.Ranges),
-		}
-
-		err := service.SetApplicationRestrictions(d.ID.ValueString(), setRestrictionReq)
-
-		if err != nil {
-			tflog.Error(ctx, fmt.Sprintf("Error Setting application restrictions: %s", err))
+			resp.Diagnostics.AddError(
+				"Error Updating API Application Details",
+				fmt.Sprint(err),
+			)
 			return
 		}
 	}
@@ -267,8 +190,8 @@ func (r *AccountsApplication) Update(ctx context.Context, req resource.UpdateReq
 	resp.Diagnostics.Append(resp.State.Set(ctx, &d)...)
 }
 
-func (r *AccountsApplication) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var d AccountsApplicationModel
+func (r *AccountApplication) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	var d AccountApplicationModel
 	service := r.client
 
 	resp.Diagnostics.Append(req.State.Get(ctx, &d)...)
@@ -284,11 +207,14 @@ func (r *AccountsApplication) Delete(ctx context.Context, req resource.DeleteReq
 	err := service.DeleteApplication(id)
 
 	if err != nil {
-		tflog.Error(ctx, fmt.Sprintf("Error deleting application: %s", err))
+		resp.Diagnostics.AddError(
+			"Error Deleting Application",
+			fmt.Sprint(err),
+		)
 		return
 	}
 }
 
-func (r *AccountsApplication) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+func (r *AccountApplication) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
