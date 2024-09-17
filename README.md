@@ -1,4 +1,4 @@
-# terraform-provider-ecloud
+# terraform-provider-account
 
 ## Getting Started
 
