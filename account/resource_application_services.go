@@ -56,24 +56,29 @@ func (r *ApplicationServiceMapping) Schema(_ context.Context, _ resource.SchemaR
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"application_id": schema.StringAttribute{
-				Required: true,
+				Required:    true,
+				Description: "ID of application to apply services access to",
 			},
 		},
 		Blocks: map[string]schema.Block{
 			"service": schema.ListNestedBlock{
+				Description: "Defines service access",
 				NestedObject: schema.NestedBlockObject{
 					Attributes: map[string]schema.Attribute{
 						"name": schema.StringAttribute{
-							Required: true,
+							Required:    true,
+							Description: "Name of service",
 						},
 						"roles": schema.ListAttribute{
 							ElementType: types.StringType,
 							Required:    true,
+							Description: "List of service roles",
 						},
 					},
 				},
 			},
 		},
+		Description: "Defines the services which the API key has access to and the access roles it has for each.",
 	}
 }
 

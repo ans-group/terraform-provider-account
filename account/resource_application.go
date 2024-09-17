@@ -51,20 +51,25 @@ func (r *AccountApplication) Schema(_ context.Context, _ resource.SchemaRequest,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
+				Description: "ID of created Application Key",
 			},
 			"key": schema.StringAttribute{
 				Computed: true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
+				Description: "API Key",
 			},
 			"name": schema.StringAttribute{
-				Required: true,
+				Required:    true,
+				Description: "Application name",
 			},
 			"description": schema.StringAttribute{
-				Optional: true,
+				Optional:    true,
+				Description: "Application description",
 			},
 		},
+		Description: "API Application Key resource",
 	}
 }
 

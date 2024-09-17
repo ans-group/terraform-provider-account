@@ -62,6 +62,7 @@ func (p *accountProvider) Schema(_ context.Context, _ provider.SchemaRequest, re
 				Description: "API token to authenticate with UKFast APIs. See https://developers.ukfast.io for more details",
 			},
 		},
+		Description: "Official ANS Account Terraform provider, allowing for manipulation of Glass Account environments",
 	}
 }
 

@@ -43,16 +43,20 @@ func (r *ApplicationIPRestriction) Schema(_ context.Context, _ resource.SchemaRe
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"application_id": schema.StringAttribute{
-				Required: true,
+				Required:    true,
+				Description: "ID of application to apply restrictions to",
 			},
 			"type": schema.StringAttribute{
-				Required: true,
+				Required:    true,
+				Description: "Type of restrictions: 'denylist' or 'allowlist'",
 			},
 			"ranges": schema.ListAttribute{
 				ElementType: types.StringType,
 				Required:    true,
+				Description: "Defines the IPs or ranges",
 			},
 		},
+		Description: "Defines an allowlist or denylist of IP ranges to restrict usage of an Application Key.",
 	}
 }
 
