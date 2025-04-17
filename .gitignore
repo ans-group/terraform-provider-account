@@ -1,4 +1,4 @@
-terraform-provider-account*
+terraform-provider-account
 .terraform/
 .vscode/
 .idea/
